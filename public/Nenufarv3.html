@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NenúfarAI - Identificación de Plantas con PlantNet</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #2e7d32;
+            --secondary-color: #4caf50;
+            --accent-color: #8bc34a;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+            
+        }
+        
+        .container {
+            max-width: 1400px;
+        }
+        
+        h1 {
+            color: var(--primary-color);
+            font-weight: 700;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .video-container {
+            position: relative;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            background: #000;
+        }
+        
+        #video, #displayCanvas {
+            width: 100%;
+            height: auto;
+            border-radius: 15px;
+        }
+        
+        .real-time-box {
+            position: absolute;
+            border: 3px solid #00ff00;
+            background-color: rgba(0, 255, 0, 0.1);
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .plant-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 255, 0, 0.9);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 11;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        }
+        
+        .results-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            height: 100%;
+        }
+        
+        .btn {
+            border-radius: 10px;
+            font-weight: 600;
+            padding: 12px 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .btn-success {
+            background-color: var(--secondary-color);
+            border-color: var(--secondary-color);
+        }
+        
+        .plant-card {
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            border: none;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            cursor: pointer;
+        }
+        
+        .plant-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .progress {
+            height: 8px;
+            border-radius: 10px;
+        }
+        
+        .confidence-badge {
+            font-size: 12px;
+            padding: 5px 10px;
+            border-radius: 20px;
+        }
+        
+        .detection-item {
+            border-left: 4px solid var(--accent-color);
+            transition: all 0.3s ease;
+        }
+        
+        .detection-item:hover {
+            background-color: #f8fff8;
+            transform: translateX(5px);
+        }
+        
+        .history-thumbnail {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 10px 10px 0 0;
+        }
+        
+        .api-status {
+            font-size: 12px;
+            padding: 3px 8px;
+            border-radius: 10px;
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .feature-icon {
+            font-size: 1.5rem;
+            color: var(--primary-color);
+            margin-right: 10px;
+        }
+        
+        .stats-card {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+        
+        .stats-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .organ-selector {
+            background: #e8f5e9;
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- BOTONES LOGIN / PROFILE -->
+<div class="position-fixed top-0 end-0 p-3" style="z-index:1050;">
+  <div id="authButtons" class="d-flex gap-2">
+    <button id="btnOpenLogin" class="btn btn-outline-success btn-sm">Entrar</button>
+    <button id="btnOpenRegister" class="btn btn-success btn-sm">Registro</button>
+  </div>
+
+  <div id="userPanel" class="d-none align-items-center">
+    <span id="userName" class="me-2 text-success"></span>
+    <button id="btnProfile" class="btn btn-outline-success btn-sm me-1">Perfil</button>
+    <button id="btnLogout" class="btn btn-danger btn-sm">Cerrar sesión</button>
+  </div>
+</div>
+
+<!-- Modal Login -->
+<div class="modal fade" id="authModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 id="authModalTitle" class="modal-title">Iniciar sesión</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="authForm">
+          <div class="mb-3" id="nameField" style="display:none;">
+            <label class="form-label">Nombre</label>
+            <input type="text" id="regName" class="form-control" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input type="email" id="regEmail" class="form-control" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Contraseña</label>
+            <input type="password" id="regPassword" class="form-control" required />
+          </div>
+          <div class="text-danger small" id="authError" style="display:none;"></div>
+          <div class="d-flex justify-content-between mt-3">
+            <button type="submit" id="authSubmit" class="btn btn-success">Entrar</button>
+            <a href="#" id="toggleAuthMode" class="align-self-center">¿No tienes cuenta? Regístrate</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    <div class="container py-4">
+        <div class="text-center mb-5">
+            <h1 class="mb-3">NenúfarAI <span class="text-success">Plant Recognition</span></h1>
+            <p class="lead">Sistema de identificación de plantas con tecnología PlantNet e IA</p>
+            
+            <div class="row mt-4">
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-number" id="plantsIdentified">0</div>
+                        <small>Plantas Identificadas</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-number" id="detectionAccuracy">95%</div>
+                        <small>Precisión</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-number" id="apiStatus">Online</div>
+                        <small>Estado PlantNet</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-number" id="databaseSize">12K+</div>
+                        <small>Especies en DB</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-8">
+                <div class="video-container position-relative" id="videoContainer">
+                    <video id="video" autoplay playsinline class="w-100"></video>
+                    <canvas id="displayCanvas" class="w-100 d-none"></canvas>
+                    <div id="realTimeBoxes"></div>
+                    <div id="plantIndicator" class="plant-indicator d-none">
+                        <i class="fas fa-leaf"></i> Planta detectada
+                    </div>
+                    
+                    <div class="position-absolute bottom-0 start-0 m-3">
+                        <span class="badge bg-dark bg-opacity-75" id="resolutionInfo"></span>
+                    </div>
+                </div>
+                
+                <div class="organ-selector mt-3">
+                    <label class="form-label"><i class="fas fa-seedling feature-icon"></i>Selecciona la parte de la planta a identificar:</label>
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="organType" id="organLeaf" autocomplete="off" checked>
+                        <label class="btn btn-outline-success" for="organLeaf"><i class="fas fa-leaf"></i> Hoja</label>
+                        
+                        <input type="radio" class="btn-check" name="organType" id="organFlower" autocomplete="off">
+                        <label class="btn btn-outline-success" for="organFlower"><i class="fas fa-spa"></i> Flor</label>
+                        
+                        <input type="radio" class="btn-check" name="organType" id="organFruit" autocomplete="off">
+                        <label class="btn btn-outline-success" for="organFruit"><i class="fas fa-apple-alt"></i> Fruto</label>
+                        
+                        <input type="radio" class="btn-check" name="organType" id="organBark" autocomplete="off">
+                        <label class="btn btn-outline-success" for="organBark"><i class="fas fa-tree"></i> Corteza</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="results-container">
+                    <h5 class="mb-3"><i class="fas fa-seedling text-success"></i> Identificación de Plantas</h5>
+                    
+                    <div id="realTimeResults">
+                        <div class="text-center py-4">
+                            <i class="fas fa-leaf text-muted" style="font-size: 3rem;"></i>
+                            <p class="text-muted mt-2">Captura o sube una imagen para identificar plantas</p>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid gap-2 mt-4">
+                        <button id="takePhoto" class="btn btn-success">
+                            <i class="fas fa-camera"></i> Capturar Imagen
+                        </button>
+                        <label for="uploadImage" class="btn btn-primary">
+                            <i class="fas fa-upload"></i> Subir Imagen
+                            <input type="file" id="uploadImage" accept="image/*" hidden>
+                        </label>
+                        <button id="resetCanvas" class="btn btn-outline-secondary">
+                            <i class="fas fa-redo"></i> Reiniciar
+                        </button>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <h6><i class="fas fa-info-circle text-info"></i> Consejos para mejor identificación:</h6>
+                        <ul class="small text-muted">
+                            <li>Enfoca bien la planta o parte específica</li>
+                            <li>Usa buena iluminación natural</li>
+                            <li>Selecciona la parte correcta de la planta</li>
+                            <li>Evita fondos complejos</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="results-container">
+                    <h4 class="mb-3"><i class="fas fa-history"></i> Historial de Identificaciones</h4>
+                    <div id="detectionHistory" class="row">
+                        <div class="col-12 text-center py-3">
+                            <p class="text-muted">Tus identificaciones aparecerán aquí</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para detalles de planta -->
+    <div class="modal fade" id="plantModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="plantModalTitle">Detalles de la Planta</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="plantModalBody">
+                    Cargando información...
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+    
+<script>
+    // Elementos del DOM
+    const video = document.getElementById('video');
+    const videoContainer = document.getElementById('videoContainer');
+    const displayCanvas = document.getElementById('displayCanvas');
+    const displayContext = displayCanvas.getContext('2d');
+    const realTimeBoxes = document.getElementById('realTimeBoxes');
+    const realTimeResults = document.getElementById('realTimeResults');
+    const detectionHistory = document.getElementById('detectionHistory');
+    const plantModal = new bootstrap.Modal(document.getElementById('plantModal'));
+    const plantIndicator = document.getElementById('plantIndicator');
+    const plantsIdentified = document.getElementById('plantsIdentified');
+    const apiStatus = document.getElementById('apiStatus');
+    const resolutionInfo = document.getElementById('resolutionInfo');
+    
+    // Variables de estado
+    let stream = null;
+    let plantIdentificationsCount = 0;
+    let currentOrgan = 'leaf';
+    let identificationHistory = [];
+
+    // ✅ CONFIGURACIÓN CORRECTA DE PLANTNET
+    const PLANTNET_CONFIG = {
+        // 🔑 TU API KEY
+        apiKey: '2b10tnVulOk2onk8j95TXbq8',
+        
+        // 🌍 PROYECTO GLOBAL
+        
+        baseURL: 'https://my-api.plantnet.org/v2',
+        imageQuality: 0.8,
+        timeout: 30000
+    };
+
+    // ✅ INICIALIZAR CÁMARA CORREGIDA
+    async function initCamera() {
+        try {
+            console.log('📷 Iniciando cámara...');
+            stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    width: { ideal: 1280 }, 
+                    height: { ideal: 720 },
+                    facingMode: 'environment' 
+                }, 
+                audio: false 
+            });
+            video.srcObject = stream;
+            
+            // Esperar a que el video esté listo
+            await new Promise((resolve) => {
+                video.addEventListener('loadedmetadata', resolve, { once: true });
+            });
+            
+            resolutionInfo.textContent = `${video.videoWidth}×${video.videoHeight}`;
+            console.log('✅ Cámara iniciada correctamente');
+            
+        } catch (err) {
+            console.error('❌ Error al acceder a la cámara:', err);
+            realTimeResults.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> No se pudo acceder a la cámara. 
+                    Usa la opción "Subir Imagen" para identificar plantas.
+                </div>
+            `;
+        }
+    }
+
+    // ✅ FUNCIÓN PRINCIPAL DE IDENTIFICACIÓN CORREGIDA
+    async function identifyPlant(imageData) {
+        console.log('🚀 Iniciando identificación PlantNet...');
+
+        async function identifyPlant(imageData) {
+    try {
+        // Convertir canvas a blob
+        const blob = await new Promise(resolve => {
+            imageData.toBlob(resolve, 'image/jpeg', 0.9);
+        });
+
+        const formData = new FormData();
+        formData.append('image', blob);
+        formData.append('organ', currentOrgan);
+
+        // Usar el proxy en lugar de PlantNet directamente
+        const response = await fetch('/proxy/identify', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error(`Error: ${response.status}`);
+        
+        const data = await response.json();
+        return data;
+        
+    } catch (error) {
+        console.error('Error:', error);
+        throw error;
+    }
+}
+
+        
+        
+        try {
+            // Mostrar estado de carga
+            realTimeResults.innerHTML = `
+                <div class="text-center py-4">
+                    <div class="loading-spinner text-success mb-2"></div>
+                    <p>Conectando con PlantNet...</p>
+                    <small class="text-muted">API Key: ${PLANTNET_CONFIG.apiKey.substring(0, 10)}...</small>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 40%"></div>
+                    </div>
+                </div>
+            `;
+
+            // 1. Preparar imagen
+            const formData = new FormData();
+            const blob = await new Promise(resolve => {
+                imageData.toBlob(resolve, 'image/jpeg', PLANTNET_CONFIG.imageQuality);
+            });
+            
+            console.log('📸 Imagen preparada:', blob.size, 'bytes');
+
+            // 2. Parámetros OBLIGATORIOS
+            formData.append('images', blob);
+            formData.append('organs', currentOrgan);
+            
+            
+            console.log('📤 Enviando solicitud...', {
+                organ: currentOrgan,
+                projects: PLANTNET_CONFIG.projects,
+                imageSize: blob.size
+            });
+
+            // 4. Construir URL CORRECTA
+            const apiUrl = `${PLANTNET_CONFIG.baseURL}/identify/all?api-key=${PLANTNET_CONFIG.apiKey}`;
+            console.log('🌐 URL:', apiUrl);
+
+            // 5. Actualizar UI
+            realTimeResults.innerHTML = `
+                <div class="text-center py-4">
+                    <div class="loading-spinner text-success mb-2"></div>
+                    <p>Analizando planta con IA...</p>
+                    <small class="text-muted">Procesando imagen...</small>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 75%"></div>
+                    </div>
+                </div>
+            `;
+
+            // 6. Hacer petición con timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), PLANTNET_CONFIG.timeout);
+            
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                body: formData,
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            console.log('📨 Respuesta HTTP:', response.status, response.statusText);
+
+            // 7. Manejar respuesta
+            if (!response.ok) {
+                let errorMessage = `Error ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorMessage += `: ${JSON.stringify(errorData)}`;
+                    console.error('❌ Error detallado:', errorData);
+                } catch (e) {
+                    const errorText = await response.text();
+                    errorMessage += `: ${errorText}`;
+                }
+                throw new Error(errorMessage);
+            }
+
+            const data = await response.json();
+            console.log('✅ Identificación exitosa!', data);
+            
+            // 8. Actualizar contadores
+            plantIdentificationsCount++;
+            plantsIdentified.textContent = plantIdentificationsCount;
+            apiStatus.textContent = 'Online';
+            apiStatus.className = 'api-status bg-success text-white';
+            
+            return data;
+
+        } catch (error) {
+            console.error('❌ Error en identifyPlant:', error);
+            
+            // Mostrar error específico
+            let userMessage = 'Error de conexión con PlantNet';
+            
+            if (error.name === 'AbortError') {
+                userMessage = 'Timeout: La solicitud tardó demasiado';
+            } else if (error.message.includes('403')) {
+                userMessage = 'API Key rechazada. Verifica tu clave.';
+            } else if (error.message.includes('400')) {
+                userMessage = 'Solicitud incorrecta. Verifica la imagen.';
+            } else if (error.message.includes('Failed to fetch')) {
+                userMessage = 'Error de red. Verifica tu conexión a internet.';
+            } else {
+                userMessage = error.message;
+            }
+            
+            apiStatus.textContent = 'Error';
+            apiStatus.className = 'api-status bg-danger text-white';
+            
+            throw error;
+        }
+    }
+
+    // 🔄 FALLBACK A MOCK DATA MEJORADO
+    async function identifyPlantMock() {
+        console.log('🔄 Usando datos de ejemplo...');
+        
+        // Simular procesamiento
+        await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
+        
+        const mockPlants = [
+            {
+                species: {
+                    commonNames: ["Margarita", "Daisy"],
+                    scientificName: "Bellis perennis", 
+                    family: { scientificName: "Asteraceae" }
+                },
+                score: 0.85 + Math.random() * 0.1
+            },
+            {
+                species: {
+                    commonNames: ["Lavanda", "Lavender"],
+                    scientificName: "Lavandula angustifolia",
+                    family: { scientificName: "Lamiaceae" }
+                },
+                score: 0.75 + Math.random() * 0.1
+            },
+            {
+                species: {
+                    commonNames: ["Rosa", "Rose"],
+                    scientificName: "Rosa spp.",
+                    family: { scientificName: "Rosaceae" }
+                },
+                score: 0.65 + Math.random() * 0.1
+            }
+        ];
+        
+        // Mezclar resultados
+        const shuffledResults = [...mockPlants]
+            .sort(() => Math.random() - 0.5)
+            .sort((a, b) => b.score - a.score);
+        
+        return {
+            results: shuffledResults,
+            isMockData: true
+        };
+    }
+
+    // ✅ FUNCIÓN PRINCIPAL MEJORADA
+    async function processImage(canvas) {
+        try {
+            console.log('🖼️ Procesando imagen...');
+            
+            let identification;
+            try {
+                // Intentar con PlantNet real primero
+                identification = await identifyPlant(canvas);
+            } catch (error) {
+                console.log('🔀 Cayendo a datos mock...');
+                // Si falla, usar mock data
+                identification = await identifyPlantMock();
+                identification.isMockData = true;
+            }
+            
+            // Mostrar resultados
+            displayIdentificationResults(identification);
+            
+            // Añadir al historial
+            addToHistory(canvas, identification);
+            
+        } catch (error) {
+            console.error('💥 Error en processImage:', error);
+            
+            realTimeResults.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Error crítico</strong><br>
+                    <small>${error.message}</small>
+                    <div class="mt-2">
+                        <button class="btn btn-sm btn-outline-danger" onclick="runDebugTest()">
+                            <i class="fas fa-bug"></i> Ejecutar Prueba Debug
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+    }
+
+    // 🐛 FUNCIÓN DE DEBUG
+    window.runDebugTest = async function() {
+        console.group('🐛 PRUEBA DE DEBUG PLANTNET');
+        
+        try {
+            console.log('🔧 Configuración actual:');
+            console.log('- API Key:', PLANTNET_CONFIG.apiKey);
+            console.log('- Proyectos:', PLANTNET_CONFIG.projects);
+            console.log('- Base URL:', PLANTNET_CONFIG.baseURL);
+            
+            // Crear imagen de prueba simple
+            const testCanvas = document.createElement('canvas');
+            testCanvas.width = 200;
+            testCanvas.height = 200;
+            const ctx = testCanvas.getContext('2d');
+            
+            // Dibujar una "hoja" simple
+            ctx.fillStyle = '#2e8b57';
+            ctx.beginPath();
+            ctx.ellipse(100, 100, 60, 90, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            const formData = new FormData();
+            const blob = await new Promise(resolve => testCanvas.toBlob(resolve, 'image/jpeg', 0.8));
+            formData.append('images', blob);
+            formData.append('organs', 'leaf');
+            formData.append('project', 'all');
+            
+            const testUrl = `${PLANTNET_CONFIG.baseURL}/identify/all?api-key=${PLANTNET_CONFIG.apiKey}`;
+            console.log('🧪 URL de prueba:', testUrl);
+            console.log('📤 Enviando prueba...');
+            
+            const response = await fetch(testUrl, {
+                method: 'POST',
+                body: formData
+            });
+            
+            console.log('📨 Respuesta:', response.status, response.statusText);
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log('✅ PRUEBA EXITOSA:', data);
+                alert('✅ PlantNet API está funcionando correctamente!\n\nReintenta con tu imagen real.');
+            } else {
+                const errorText = await response.text();
+                console.error('❌ ERROR EN PRUEBA:', response.status, errorText);
+                alert(`❌ Error ${response.status}:\n${errorText}`);
+            }
+            
+        } catch (error) {
+            console.error('💥 ERROR DE CONEXIÓN:', error);
+            alert('❌ Error de conexión:\n' + error.message);
+        }
+        
+        console.groupEnd();
+    };
+
+    // 🎯 MOSTRAR RESULTADOS
+    function displayIdentificationResults(identification) {
+        const isMockData = identification.isMockData;
+        
+        if (!identification.results || identification.results.length === 0) {
+            realTimeResults.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="fas fa-leaf"></i> No se identificaron plantas.
+                    Intenta con una imagen más clara.
+                </div>
+            `;
+            return;
+        }
+        
+        const topResult = identification.results[0];
+        const plantName = topResult.species.commonNames ? 
+                         topResult.species.commonNames[0] : 
+                         topResult.species.scientificName;
+        
+        let html = '';
+        
+        // Añadir indicador si son datos mock
+        if (isMockData) {
+            html += `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Modo Demo</strong> - Usando datos de ejemplo
+                    <br><small>La API de PlantNet no está respondiendo</small>
+                </div>
+            `;
+        }
+        
+        html += `
+            <div class="card border-success mb-3">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="fas fa-check-circle"></i> Identificación Exitosa</h6>
+                    ${isMockData ? '<span class="badge bg-warning">Demo</span>' : ''}
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title text-success">${plantName}</h5>
+                    <p class="card-text">
+                        <span class="badge bg-light text-dark confidence-badge">
+                            ${(topResult.score * 100).toFixed(1)}% de confianza
+                        </span>
+                    </p>
+                    <p class="card-text"><em>${topResult.species.scientificName}</em></p>
+                    <p class="card-text small">
+                        <strong>Familia:</strong> ${topResult.species.family.scientificName}
+                    </p>
+                    
+                    <button class="btn btn-outline-success btn-sm" onclick="showPlantDetails('${plantName}')">
+                        <i class="fas fa-info-circle"></i> Ver detalles completos
+                    </button>
+                </div>
+            </div>
+            
+            <div class="mt-3">
+                <h6>Otras posibles coincidencias:</h6>
+                <div class="list-group">
+        `;
+        
+        // Mostrar otras opciones
+        identification.results.slice(1, 4).forEach((result, index) => {
+            const altPlantName = result.species.commonNames ? 
+                               result.species.commonNames[0] : 
+                               result.species.scientificName;
+                               
+            html += `
+                <div class="list-group-item list-group-item-action detection-item" onclick="showAlternativePlant(${index})">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1">${altPlantName}</h6>
+                        <small>${(result.score * 100).toFixed(1)}%</small>
+                    </div>
+                    <p class="mb-1 small"><em>${result.species.scientificName}</em></p>
+                    <small class="text-muted">${result.species.family.scientificName}</small>
+                </div>
+            `;
+        });
+        
+        html += '</div></div>';
+        realTimeResults.innerHTML = html;
+        
+        // Guardar para el modal
+        identificationHistory.unshift(identification);
+    }
+
+    // 📸 CAPTURAR IMAGEN
+    document.getElementById('takePhoto').addEventListener('click', async () => {
+        try {
+            if (!stream) {
+                alert('La cámara no está disponible. Usa la opción "Subir Imagen" en su lugar.');
+                return;
+            }
+
+            if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+                alert('El video no está listo. Espera un momento e intenta de nuevo.');
+                return;
+            }
+
+            displayCanvas.width = video.videoWidth;
+            displayCanvas.height = video.videoHeight;
+            displayContext.drawImage(video, 0, 0, displayCanvas.width, displayCanvas.height);
+            
+            displayCanvas.classList.remove('d-none');
+            video.classList.add('d-none');
+            
+            await processImage(displayCanvas);
+            
+        } catch (error) {
+            console.error('Error al capturar foto:', error);
+            alert('Error: ' + error.message);
+        }
+    });
+
+    // 📤 SUBIR IMAGEN
+    document.getElementById('uploadImage').addEventListener('change', async (event) => {
+        try {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!file.type.match('image.*')) {
+                alert('Por favor, selecciona un archivo de imagen válido.');
+                return;
+            }
+
+            const reader = new FileReader();
+            
+            reader.onload = async (e) => {
+                const img = new Image();
+                
+                img.onload = async () => {
+                    displayCanvas.width = img.width;
+                    displayCanvas.height = img.height;
+                    displayContext.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
+                    displayContext.drawImage(img, 0, 0, displayCanvas.width, displayCanvas.height);
+                    
+                    displayCanvas.classList.remove('d-none');
+                    if (stream) {
+                        video.classList.add('d-none');
+                    }
+                    
+                    await processImage(displayCanvas);
+                    
+                    event.target.value = '';
+                };
+                
+                img.onerror = () => {
+                    alert('Error al cargar la imagen. Intenta con otro archivo.');
+                };
+                
+                img.src = e.target.result;
+            };
+            
+            reader.onerror = () => {
+                alert('Error al leer el archivo. Intenta de nuevo.');
+            };
+            
+            reader.readAsDataURL(file);
+            
+        } catch (error) {
+            console.error('Error al subir imagen:', error);
+            alert('Error: ' + error.message);
+        }
+    });
+
+    // 🔄 REINICIAR
+    document.getElementById('resetCanvas').addEventListener('click', () => {
+        if (displayCanvas) {
+            displayContext.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
+            displayCanvas.classList.add('d-none');
+        }
+        
+        if (stream) {
+            video.classList.remove('d-none');
+        }
+        
+        realTimeResults.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-leaf text-muted" style="font-size: 3rem;"></i>
+                <p class="text-muted mt-2">Captura o sube una imagen para identificar plantas</p>
+            </div>
+        `;
+    });
+
+    // 🎛️ CONFIGURAR SELECTORES DE ÓRGANO
+    document.querySelectorAll('input[name="organType"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.checked) {
+                currentOrgan = this.id.replace('organ', '').toLowerCase();
+                console.log('🌿 Órgano seleccionado:', currentOrgan);
+            }
+        });
+    });
+
+    // 🚀 INICIALIZACIÓN MEJORADA
+    window.addEventListener('DOMContentLoaded', async () => {
+        console.log('🚀 Iniciando aplicación NenúfarAI...');
+        
+        try {
+            // Inicializar cámara
+            await initCamera();
+            
+            // Verificar configuración
+            if (!PLANTNET_CONFIG.apiKey) {
+                apiStatus.textContent = 'Configurar API';
+                apiStatus.className = 'api-status bg-warning text-dark';
+                realTimeResults.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Configuración Requerida</strong><br>
+                        <small>API Key no configurada</small>
+                    </div>
+                `;
+            } else {
+                apiStatus.textContent = 'Listo';
+                apiStatus.className = 'api-status bg-success text-white';
+                console.log('✅ Aplicación iniciada correctamente');
+            }
+            
+        } catch (error) {
+            console.error('Error inicializando:', error);
+        }
+    });
+
+    // 📊 FUNCIONES AUXILIARES (QUE MANTIENEN el codigo anterior de valeri
+
+    // Obtener nombre del órgano en español
+    function getOrganName(organ) {
+        const organs = {
+            'leaf': 'Hoja',
+            'flower': 'Flor', 
+            'fruit': 'Fruto',
+            'bark': 'Corteza'
+        };
+        return organs[organ] || organ;
+    }
+
+    // Obtener imagen de la planta
+    function getPlantImage(plantName) {
+        const placeholderImages = {
+            "Rosa": "https://images.unsplash.com/photo-1562690868-60bbe7293e94?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
+            "Margarita": "https://images.unsplash.com/photo-1606041008023-472dfb5e530f?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
+            "Lavanda": "https://images.unsplash.com/photo-1599746713890-2d3d328a3f7c?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
+            "Girasol": "https://images.unsplash.com/photo-1597848212624-a19eb35e2651?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
+            "Orquídea": "https://images.unsplash.com/photo-1517842645767-c639042777db?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80",
+            "Cactus": "https://images.unsplash.com/photo-1485955900006-10f4d324d411?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80"
+        };
+        
+        return placeholderImages[plantName] || "https://images.unsplash.com/photo-1485955900006-10f4d324d411?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=80";
+    }
+
+    // Añadir al historial
+    function addToHistory(canvas, identification) {
+        if (!identification.results || identification.results.length === 0) return;
+        
+        const topResult = identification.results[0];
+        const plantName = topResult.species.commonNames ? 
+                         topResult.species.commonNames[0] : 
+                         topResult.species.scientificName;
+        
+        const timestamp = new Date().toLocaleString();
+        const thumbnail = document.createElement('canvas');
+        const thumbCtx = thumbnail.getContext('2d');
+        
+        // Crear miniatura
+        thumbnail.width = 200;
+        thumbnail.height = 150;
+        thumbCtx.drawImage(canvas, 0, 0, thumbnail.width, thumbnail.height);
+        
+        // Crear tarjeta de historial
+        const card = document.createElement('div');
+        card.className = 'col-md-4 mb-3';
+        card.innerHTML = `
+            <div class="card plant-card h-100" onclick="showHistoryItem(${identificationHistory.length - 1})">
+                <img src="${thumbnail.toDataURL('image/jpeg')}" class="history-thumbnail" alt="Captura">
+                <div class="card-body">
+                    <h6 class="card-title">${plantName}</h6>
+                    <p class="card-text small">
+                        <em>${topResult.species.scientificName}</em>
+                    </p>
+                    <p class="card-text small">
+                        <span class="badge bg-success">${(topResult.score * 100).toFixed(1)}%</span>
+                        <span class="badge bg-secondary">${getOrganName(currentOrgan)}</span>
+                    </p>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <small class="text-muted">${timestamp}</small>
+                </div>
+            </div>
+        `;
+        
+        // Limpiar mensaje inicial si existe
+        if (detectionHistory.children.length === 1 && 
+            detectionHistory.children[0].querySelector('.text-muted')) {
+            detectionHistory.innerHTML = '';
+        }
+        
+        detectionHistory.insertBefore(card, detectionHistory.firstChild);
+
+        
+        async function saveHistoryToServer(topResult, canvas) {
+    const token = localStorage.getItem('nenufar_token');
+    if (!token) return; // no autenticado -> no enviar
+
+    // convertir canvas a base64 (si quieres enviar imagen)
+    const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1]; // base64
+
+    const body = {
+        plant_name: topResult.species.commonNames ? topResult.species.commonNames[0] : topResult.species.scientificName,
+        plant_scientific: topResult.species.scientificName,
+        confidence: (topResult.score * 100).toFixed(2),
+        details: JSON.stringify(topResult),
+        imageData // base64
+    };
+
+    await fetch('/api/history', {
+        method: 'POST',
+        headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+    });
+    }
+
+        // Guardar en servidor
+        saveHistoryToServer(topResult, canvas).catch(err => {
+            console.error('Error guardando historial en servidor:', err);
+        });
+
+        
+    }
+
+    // Mostrar elemento del historial
+    window.showHistoryItem = function(index) {
+        const identification = identificationHistory[index];
+        displayIdentificationResults(identification);
+        
+        // Scroll a resultados
+        document.querySelector('.results-container').scrollIntoView({ behavior: 'smooth' });
+    };
+
+    // Mostrar planta alternativa
+    window.showAlternativePlant = function(index) {
+        const identification = identificationHistory[0];
+        const result = identification.results[index + 1];
+        
+        const plantName = result.species.commonNames ? 
+                        result.species.commonNames[0] : 
+                        result.species.scientificName;
+        
+        document.getElementById('plantModalTitle').textContent = plantName;
+        
+        let html = `
+            <div class="row">
+                <div class="col-md-6">
+                    <img src="${getPlantImage(plantName)}" class="img-fluid rounded mb-3" alt="${plantName}">
+                </div>
+                <div class="col-md-6">
+                    <h5>${plantName}</h5>
+                    <p><em>${result.species.scientificName}</em></p>
+                    <p><strong>Familia:</strong> ${result.species.family.scientificName}</p>
+                    <p><strong>Confianza:</strong> ${(result.score * 100).toFixed(1)}%</p>
+                    <div class="alert alert-info mt-3">
+                        <small>
+                            <i class="fas fa-info-circle"></i> Esta es una identificación alternativa. 
+                            La primera opción tiene mayor probabilidad de ser correcta.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('plantModalBody').innerHTML = html;
+        plantModal.show();
+    };
+
+    // Mostrar detalles completos de la planta
+    window.showPlantDetails = function(plantName) {
+        const identification = identificationHistory[0];
+        const topResult = identification.results[0];
+        
+        document.getElementById('plantModalTitle').textContent = plantName;
+        
+        let html = `
+            <div class="row">
+                <div class="col-md-6">
+                    <img src="${getPlantImage(plantName)}" class="img-fluid rounded mb-3" alt="${plantName}">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6>Información Taxonómica</h6>
+                            <p class="mb-1"><strong>Nombre científico:</strong> <em>${topResult.species.scientificName}</em></p>
+                            <p class="mb-1"><strong>Familia:</strong> ${topResult.species.family.scientificName}</p>
+                            ${topResult.species.genus ? `<p class="mb-0"><strong>Género:</strong> ${topResult.species.genus.scientificName}</p>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h6>Detalles de Identificación</h6>
+                            <p class="mb-1"><strong>Confianza:</strong> ${(topResult.score * 100).toFixed(1)}%</p>
+                            <p class="mb-1"><strong>Parte analizada:</strong> ${getOrganName(currentOrgan)}</p>
+                            <p class="mb-0"><strong>Método:</strong> ${identification.isMockData ? 'Demo (datos de ejemplo)' : 'PlantNet API'}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-body">
+                            <h6>Información Adicional</h6>
+                            <p class="small">
+                                Los datos provienen de la base de PlantNet con más de 12,000 especies.
+                                Para información detallada sobre cuidados, visita jardines botánicos o consulta con expertos.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('plantModalBody').innerHTML = html;
+        plantModal.show();
+    };
+
+    // AUTENTICACIÓN DE USUARIO
+const authModalEl = document.getElementById('authModal');
+const authModal = new bootstrap.Modal(authModalEl);
+const authModalTitle = document.getElementById('authModalTitle');
+const authForm = document.getElementById('authForm');
+const nameField = document.getElementById('nameField');
+const toggleAuthMode = document.getElementById('toggleAuthMode');
+const authSubmit = document.getElementById('authSubmit');
+const authError = document.getElementById('authError');
+
+let isRegisterMode = false;
+
+document.getElementById('btnOpenLogin').addEventListener('click', () => {
+  isRegisterMode = false;
+  renderAuthModal();
+  authModal.show();
+});
+document.getElementById('btnOpenRegister').addEventListener('click', () => {
+  isRegisterMode = true;
+  renderAuthModal();
+  authModal.show();
+});
+document.getElementById('toggleAuthMode').addEventListener('click', (e) => {
+  e.preventDefault();
+  isRegisterMode = !isRegisterMode;
+  renderAuthModal();
+});
+
+function renderAuthModal() {
+  authError.style.display = 'none';
+  if (isRegisterMode) {
+    authModalTitle.textContent = 'Registro';
+    nameField.style.display = 'block';
+    authSubmit.textContent = 'Crear cuenta';
+    toggleAuthMode.textContent = '¿Ya tienes cuenta? Inicia sesión';
+  } else {
+    authModalTitle.textContent = 'Iniciar sesión';
+    nameField.style.display = 'none';
+    authSubmit.textContent = 'Entrar';
+    toggleAuthMode.textContent = '¿No tienes cuenta? Regístrate';
+  }
+}
+
+// intercept fetch to add Authorization header
+async function authFetch(input, init = {}) {
+  init.headers = init.headers || {};
+  const token = localStorage.getItem('nenufar_token');
+  if (token) {
+    init.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return fetch(input, init);
+}
+
+// handle form submit
+authForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  authError.style.display = 'none';
+
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value.trim();
+  const name = document.getElementById('regName').value.trim();
+
+  try {
+    const url = isRegisterMode ? '/api/auth/register' : '/api/auth/login';
+    const body = isRegisterMode ? { email, password, name } : { email, password };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Error');
+
+    // guardar token y set UI
+    localStorage.setItem('nenufar_token', data.token);
+    localStorage.setItem('nenufar_user', JSON.stringify(data.user));
+    authModal.hide();
+    setUIForAuthenticated(data.user);
+    loadUserHistory(); // opcional: cargar historial al entrar
+  } catch (err) {
+    authError.textContent = err.message;
+    authError.style.display = 'block';
+  }
+});
+
+// UI state handlers
+const authButtons = document.getElementById('authButtons');
+const userPanel = document.getElementById('userPanel');
+const userName = document.getElementById('userName');
+document.getElementById('btnLogout').addEventListener('click', logout);
+
+function setUIForAuthenticated(user) {
+  authButtons.classList.add('d-none');
+  userPanel.classList.remove('d-none');
+  userName.textContent = user?.name || user?.email;
+}
+
+function setUIForUnauthenticated() {
+  authButtons.classList.remove('d-none');
+  userPanel.classList.add('d-none');
+  userName.textContent = '';
+}
+
+function logout() {
+  localStorage.removeItem('nenufar_token');
+  localStorage.removeItem('nenufar_user');
+  setUIForUnauthenticated();
+  // opcional: limpiar historial UI
+  document.getElementById('detectionHistory').innerHTML = `<div class="col-12 text-center py-3"><p class="text-muted">Inicia sesión para guardar historial</p></div>`;
+}
+
+// on load -> try to restore
+(async function restoreSession() {
+  const token = localStorage.getItem('nenufar_token');
+  if (!token) { setUIForUnauthenticated(); return; }
+  try {
+    const res = await authFetch('/api/auth/profile');
+    if (!res.ok) throw new Error('No autorizado');
+    const data = await res.json();
+    setUIForAuthenticated(data.user);
+    loadUserHistory();
+  } catch (err) {
+    console.warn('No se pudo restaurar sesión:', err);
+    logout();
+  }
+})();
+
+// fetch history and render to your UI
+async function loadUserHistory() {
+  try {
+    const res = await authFetch('/api/history');
+    if (!res.ok) throw new Error('No autorizado');
+    const { history } = await res.json();
+    const container = document.getElementById('detectionHistory');
+    if (!history || history.length === 0) {
+      container.innerHTML = `<div class="col-12 text-center py-3"><p class="text-muted">No hay historial</p></div>`;
+      return;
+    }
+    container.innerHTML = history.map(h => `
+      <div class="col-md-3 mb-3">
+        <div class="card plant-card">
+          ${h.hasImage ? `<img src="data:image/jpeg;base64,${btoa(h.image_data || '')}" class="history-thumbnail" />` : ''}
+          <div class="card-body">
+            <h6 class="card-title">${h.plant_name || '—'}</h6>
+            <p class="small text-muted"><em>${h.plant_scientific || ''}</em></p>
+            <div class="d-flex justify-content-between align-items-center">
+              <small>${new Date(h.detection_date).toLocaleString()}</small>
+              <div>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteHistoryItem(${h.id})">Eliminar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+window.deleteHistoryItem = async function (id) {
+  if (!confirm('¿Eliminar este elemento?')) return;
+  try {
+    const res = await authFetch('/api/history/' + id, { method: 'DELETE' });
+    if (!res.ok) throw new Error('No autorizado o error');
+    await loadUserHistory();
+  } catch (err) {
+    alert('No se pudo eliminar: ' + err.message);
+  }
+};
+    
+</script>
+</body>
+</html>
